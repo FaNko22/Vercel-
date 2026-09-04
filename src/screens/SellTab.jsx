@@ -32,61 +32,32 @@ export function SellTab({ canSell=true, products, branchStock, cart, addToCart, 
   return (
     <div>
       <ShiftBar activeShift={activeShift} branchName={branchName} onOpen={onOpenShift} onClose={onCloseShift} shiftPeriod={shiftPeriod} canChooseShiftPeriod={canChooseShiftPeriod} canOpen={canOpen} canClose={canClose} />
+      {!canSell && <div className="card card-pad" style={{ marginBottom: 16 }}><strong style={{ fontSize: 13 }}>وضع المراجعة</strong><p className="page-subtitle" style={{ marginTop: 4 }}>صلاحية المدير تسمح بمتابعة التشغيل وإقفال الشيفت، بينما تسجيل البيع مخصص للكاشير.</p></div>}
+      <div className="pos-layout">
+        <section className="pos-products">
+          <div className="section-head"><div><span className="eyebrow">نقطة البيع</span><h1 className="page-title">المنتجات</h1><p className="page-subtitle">{products.length} منتج متاح في {branchName || 'الفرع'}</p></div><div className="search-wrap" style={{ width: 'min(100%, 240px)' }}><Search size={16}/><input className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ابحث باسم المنتج" /></div></div>
+        {!products.length ? <EmptyState text="لسه مفيش منتجات. الـ Owner يقدر يضيفها من الإدارة." /> : !filtered.length ? <EmptyState text="مفيش منتج بالاسم ده." /> : canSell ? <div className="product-grid">{filtered.map((p) => {
+          const qty = branchStock[p.id] || 0; const outOfStock = p.track_stock && qty <= 0;
+          return <button key={p.id} disabled={outOfStock} onClick={() => setPicker(p)} className="product-tile">
+            <div className="product-tile-top"><span className="pill">{TYPE_LABEL[p.type]}</span>{p.track_stock && <span className="tiny">{fmt(qty)} {p.type === 'bulk' ? 'جم' : 'قطعة'}</span>}</div>
+            <strong>{p.name}{p.package_weight ? ` (${p.package_weight}جم)` : ''}</strong><div className="product-price">{fmt(p.sell_price)} ج.م {p.type === 'bulk' ? '/ كجم' : ''}</div>
+            {outOfStock && <span className="pill pill-danger" style={{ display: 'inline-block', marginTop: 9 }}>نفد المخزون</span>}
+          </button>;
+        })}</div> : null}
+        {canSell && picker && <QuantityModal product={picker} available={branchStock[picker.id] || 0} onClose={() => setPicker(null)} onConfirm={(qty) => { addToCart(picker, qty); setPicker(null); }} />}
+        </section>
 
-      <div style={{ position: "relative", marginBottom: 12 }}>
-        <Search size={16} style={{ position: "absolute", right: 12, top: 12, color: "var(--dim)" }} />
-        <input
-          className="text-input"
-          style={{ width: "100%", paddingRight: 36 }}
-          placeholder="دور على منتج بالاسم..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+        <aside className="card cart-panel">
+          <div className="card-title"><div><h2>الفاتورة الحالية</h2><p>{cart.length ? `${cart.length} أصناف` : 'أضف منتجًا للبدء'}</p></div><Check size={18} color="var(--accent)"/></div>
+          {!cart.length ? <EmptyState text="اضغط على أي منتج لإضافته للفاتورة." /> : <>
+            <div className="cart-items">{cart.map((i) => <div key={i.productId} className="cart-line"><div><strong>{i.name}</strong><span>{i.type === 'bulk' ? `${fmt(i.qty)} جم` : `${i.qty} قطعة`} · {fmt(lineTotal(i))} ج.م</span></div><div className="qty-control"><button onClick={() => addToCart(i, i.type === 'bulk' ? -50 : -1)}><Minus size={12}/></button><b>{i.type === 'bulk' ? fmt(i.qty) : i.qty}</b><button onClick={() => addToCart(i, i.type === 'bulk' ? 50 : 1)}><Plus size={12}/></button></div><button className="icon-button" onClick={() => removeFromCart(i.productId)}><Trash2 size={14}/></button></div>)}</div>
+            <div className="total-line"><span>الإجمالي</span><strong>{fmt(cartTotal)} ج.م</strong></div>
+            <div className="payment-grid"><button className={`payment-option ${paymentMethod === 'cash' ? 'active' : ''}`} onClick={() => setPaymentMethod('cash')}>نقدي</button><button className={`payment-option ${paymentMethod === 'vodafone_cash' ? 'active' : ''}`} onClick={() => setPaymentMethod('vodafone_cash')}>فودافون كاش</button></div>
+            <div style={{ marginTop: 13 }}><label className="tiny" style={{display:'block',marginBottom:5}}>بيانات العميل <span style={{opacity:.7}}>اختياري</span></label><input className="input" value={custName} onChange={(e) => setCustName(e.target.value)} placeholder="اسم العميل"/><input className="input" style={{ marginTop: 7 }} value={custPhone} onChange={(e) => setCustPhone(e.target.value)} placeholder="رقم الموبايل" inputMode="tel"/></div>
+            <button className="button button-primary button-wide" onClick={doCheckout}><Check size={16}/> إتمام البيع وطباعة الفاتورة</button>
+          </>}
+        </aside>
       </div>
-
-      {!canSell && <div className="branch-row" style={{marginBottom:12}}><div style={{textAlign:'right'}}><p style={{fontWeight:700}}>وضع المدير</p><p className="tiny">المدير لا يبيع ولا يعدّل. دوره مراجعة الشيفت وإقفاله والمالية اليومية.</p></div></div>}
-      {canSell && !filtered.length && <EmptyState text="مفيش منتج بالاسم ده." />}
-
-      {canSell && <div className="grid-2">
-        {filtered.map((p) => {
-          const qty = branchStock[p.id] || 0;
-          const outOfStock = p.track_stock && qty <= 0;
-          return (
-            <button key={p.id} disabled={outOfStock} onClick={() => setPicker(p)} className={`product-card ${outOfStock ? "disabled" : ""}`}>
-              <div className="product-card-top">
-                <span className="pill">{TYPE_LABEL[p.type]}</span>
-                {p.track_stock && <span className="tiny">{p.type === "bulk" ? `${fmt(qty)} جم` : `${fmt(qty)} قطعة`}</span>}
-              </div>
-              <p className="product-name">{p.name}{p.package_weight ? ` (${p.package_weight}جم)` : ""}</p>
-              <p className="product-price">{fmt(p.sell_price)} ج.م {p.type === "bulk" ? "/ كجم" : ""}</p>
-              {outOfStock && <p className="tiny-bad">خلصت الكمية</p>}
-            </button>
-          );
-        })}
-      </div>}
-
-      {canSell && picker && <QuantityModal product={picker} available={branchStock[picker.id] || 0} onClose={() => setPicker(null)} onConfirm={(qty) => { addToCart(picker, qty); setPicker(null); }} />}
-
-      {canSell && cart.length > 0 && (
-        <div className="cart">
-          <p className="cart-title">الفاتورة الحالية</p>
-          {cart.map((i) => (
-            <div key={i.productId} className="cart-row">
-              <button style={{ color: "var(--bad)" }} onClick={() => removeFromCart(i.productId)}><Trash2 size={14} /></button>
-              <span className="tiny">{fmt(lineTotal(i))} ج.م</span>
-              <span>{i.name} × {i.type === "bulk" ? `${fmt(i.qty)}جم` : i.qty}</span>
-            </div>
-          ))}
-          <div className="cart-total"><span style={{ color: "var(--accent)" }}>{fmt(cartTotal)} ج.م</span><span>الإجمالي</span></div>
-          <div className="tabs-2" style={{ marginTop: 8 }}>
-            <button className={paymentMethod === "cash" ? "tab-active" : "tab-inactive"} onClick={() => setPaymentMethod("cash")}>نقدي</button>
-            <button className={paymentMethod === "vodafone_cash" ? "tab-active" : "tab-inactive"} onClick={() => setPaymentMethod("vodafone_cash")}>فودافون كاش</button>
-          </div>
-          <input className="text-input" style={{ width: "100%", marginTop: 8 }} placeholder="اسم العميل (اختياري)" value={custName} onChange={(e) => setCustName(e.target.value)} />
-          <input className="text-input" style={{ width: "100%", marginTop: 8 }} placeholder="رقم موبايل العميل (اختياري)" inputMode="tel" value={custPhone} onChange={(e) => setCustPhone(e.target.value)} />
-          <button className="btn btn-primary" onClick={doCheckout}><Check size={18} /> إتمام البيع وطباعة الفاتورة</button>
-        </div>
-      )}
     </div>
   );
 }

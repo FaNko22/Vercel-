@@ -8,26 +8,18 @@ export function ShiftBar({ activeShift, branchName, onOpen, onClose, shiftPeriod
 
   if (!activeShift) {
     return (
-      <div className="branch-row" style={{ marginBottom: 12, background: "#3A241C", border: "1px solid #C94F3E66" }}>
-        {canOpen ? <button className="btn-secondary" style={{ background: "var(--accent)", color: "var(--bg)" }} onClick={() => setOpeningModal(true)}>ابدأ الشيفت</button> : <span className="tiny">في انتظار الكاشير لبدء الشيفت</span>}
-        <div style={{ textAlign: "right" }}>
-          <p style={{ fontWeight: 700, fontSize: 13 }}>لسه مفيش شيفت مفتوح في {branchName}</p>
-          <p className="tiny">افتح شيفت عشان تسجل النقدية الافتتاحية وتقفلها آخر اليوم</p>
-        </div>
+      <div className="shift-banner">
+        {canOpen ? <button className="button button-primary" onClick={() => setOpeningModal(true)}>ابدأ الشيفت</button> : <span className="tiny">في انتظار الكاشير لبدء الشيفت</span>}
+        <div><strong>لا يوجد شيفت مفتوح في {branchName || "هذا الفرع"}</strong><p> {canOpen ? "ابدأ الشيفت لتسجيل النقدية الافتتاحية قبل البيع." : "في انتظار الكاشير لبدء الشيفت."}</p></div>
         {canOpen && openingModal && <OpenShiftModal shiftPeriod={shiftPeriod} canChooseShiftPeriod={canChooseShiftPeriod} onClose={() => setOpeningModal(false)} onOpen={(cash, period) => { onOpen(cash, period); setOpeningModal(false); }} />}
       </div>
     );
   }
 
   return (
-    <div className="branch-row" style={{ marginBottom: 12 }}>
-      {canClose && <button className="btn-secondary" onClick={() => setClosingModal(true)}>إنهاء الشيفت</button>}
-      <div style={{ textAlign: "right" }}>
-        <p style={{ fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" }}>
-          <Clock size={12} /> شيفت مفتوح من {fmtDateTime(Date.parse(activeShift.opened_at))}
-        </p>
-        <p className="tiny">النقدية الافتتاحية: {fmt(activeShift.opening_cash)} ج.م</p>
-      </div>
+    <div className="shift-banner">
+      {canClose && <button className="button button-secondary" onClick={() => setClosingModal(true)}>إنهاء الشيفت</button>}
+      <div><strong><Clock size={12} style={{verticalAlign:"middle",marginLeft:4}}/> الشيفت مفتوح · {branchName}</strong><p>بدأ {fmtDateTime(Date.parse(activeShift.opened_at))} · افتتاحي {fmt(activeShift.opening_cash)} ج.م</p></div>
       {canClose && closingModal && <CloseShiftModal shift={activeShift} onClose={() => setClosingModal(false)} onConfirm={(cash, notes) => { onClose(cash, notes); setClosingModal(false); }} />}
     </div>
   );

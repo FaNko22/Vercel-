@@ -9,7 +9,7 @@ export function ReportsTab({ reportsData, branches, sales, isOwner, deleteSale, 
   const [showLog, setShowLog] = useState(false);
   const [finance,setFinance]=useState(null);
   const [summary,setSummary]=useState(null);
-  const fallback = reportsData; const perBranch = summary ? summary.perBranch || {} : fallback.perBranch; const perUser = summary ? summary.perUser || {} : fallback.perUser; const all = summary ? summary.all || fallback.all : fallback.all; const topProducts = summary ? summary.topProducts || fallback.topProducts : fallback.topProducts;
+  const fallback = reportsData; const perBranch = summary ? summary.perBranch || {} : fallback.perBranch; const perUser = summary ? summary.perUser || {} : fallback.perUser; const all = summary ? summary.all || fallback.all : fallback.all; const topProducts = summary ? summary.topProducts || fallback.topProducts : fallback.topProducts; const bottomProducts = summary ? summary.bottomProducts || fallback.bottomProducts || [] : fallback.bottomProducts || [];
   useEffect(()=>{api('report_summary').then(r=>setSummary(r.data)).catch(()=>{}); api('daily_finance',{method:'POST',body:{branch_id:branches.length===1?branches[0].id:null}}).then(r=>setFinance(r.data)).catch(()=>{});},[branches]);
 
   const now = Date.now();
@@ -100,7 +100,7 @@ export function ReportsTab({ reportsData, branches, sales, isOwner, deleteSale, 
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <User size={16} color="var(--muted)" />
-                <p style={{ fontWeight: 700 }}>{name}</p>
+                <p style={{ fontWeight: 700 }}>{d.name || name}</p>
               </div>
             </div>
           ))}
@@ -111,6 +111,18 @@ export function ReportsTab({ reportsData, branches, sales, isOwner, deleteSale, 
         <>
           <p className="tiny" style={{ margin: "20px 0 8px" }}>الأكتر مبيعًا</p>
           {topProducts.map(([name, qty], i) => (
+            <div key={name} style={{ display: "flex", justifyContent: "space-between", background: "var(--surface)", borderRadius: 10, padding: "8px 12px", fontSize: 14, marginBottom: 6 }}>
+              <span className="tiny">{fmt(qty)}</span>
+              <span style={{ display: "flex", gap: 8 }}><span className="tiny">{i + 1}.</span>{name}</span>
+            </div>
+          ))}
+        </>
+      )}
+
+      {bottomProducts.length > 0 && (
+        <>
+          <p className="tiny" style={{ margin: "20px 0 8px" }}>الأقل مبيعًا</p>
+          {bottomProducts.map(([name, qty], i) => (
             <div key={name} style={{ display: "flex", justifyContent: "space-between", background: "var(--surface)", borderRadius: 10, padding: "8px 12px", fontSize: 14, marginBottom: 6 }}>
               <span className="tiny">{fmt(qty)}</span>
               <span style={{ display: "flex", gap: 8 }}><span className="tiny">{i + 1}.</span>{name}</span>
