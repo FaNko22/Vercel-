@@ -2,7 +2,7 @@ import { useState } from "react";
 import { X, Clock, Wallet } from "lucide-react";
 import { fmt, fmtDateTime } from "../lib";
 
-export function ShiftBar({ activeShift, branchName, onOpen, onClose, canOpen=true, canClose=true }) {
+export function ShiftBar({ activeShift, branchName, onOpen, onClose, shiftPeriod='morning', canChooseShiftPeriod=false, canOpen=true, canClose=true }) {
   const [openingModal, setOpeningModal] = useState(false);
   const [closingModal, setClosingModal] = useState(false);
 
@@ -14,7 +14,7 @@ export function ShiftBar({ activeShift, branchName, onOpen, onClose, canOpen=tru
           <p style={{ fontWeight: 700, fontSize: 13 }}>لسه مفيش شيفت مفتوح في {branchName}</p>
           <p className="tiny">افتح شيفت عشان تسجل النقدية الافتتاحية وتقفلها آخر اليوم</p>
         </div>
-        {canOpen && openingModal && <OpenShiftModal onClose={() => setOpeningModal(false)} onOpen={(cash) => { onOpen(cash); setOpeningModal(false); }} />}
+        {canOpen && openingModal && <OpenShiftModal shiftPeriod={shiftPeriod} canChooseShiftPeriod={canChooseShiftPeriod} onClose={() => setOpeningModal(false)} onOpen={(cash, period) => { onOpen(cash, period); setOpeningModal(false); }} />}
       </div>
     );
   }
@@ -33,15 +33,17 @@ export function ShiftBar({ activeShift, branchName, onOpen, onClose, canOpen=tru
   );
 }
 
-function OpenShiftModal({ onClose, onOpen }) {
+function OpenShiftModal({ onClose, onOpen, shiftPeriod, canChooseShiftPeriod }) {
   const [cash, setCash] = useState("");
+  const [period, setPeriod] = useState(shiftPeriod);
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head"><button className="icon-btn" onClick={onClose}><X size={20} /></button><h3>بدء الشيفت</h3></div>
         <p className="tiny" style={{ marginBottom: 10 }}>اكتب النقدية الموجودة في الدرج دلوقتي قبل ما تبدأ البيع</p>
+        {canChooseShiftPeriod && <select className="select" style={{width:'100%',marginBottom:8}} value={period} onChange={(e) => setPeriod(e.target.value)}><option value="morning">صباحي</option><option value="evening">مسائي</option></select>}
         <input className="text-input" type="number" placeholder="النقدية الافتتاحية" value={cash} onChange={(e) => setCash(e.target.value)} />
-        <button className="btn btn-primary" disabled={cash === ""} onClick={() => onOpen(Number(cash) || 0)}>بدء الشيفت</button>
+        <button className="btn btn-primary" disabled={cash === ""} onClick={() => onOpen(Number(cash) || 0, period)}>بدء الشيفت</button>
       </div>
     </div>
   );

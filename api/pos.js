@@ -77,7 +77,7 @@ export default async function handler(req,res){
     if (action==='setup_owner' && req.method==='POST') {
       const {count}=await supabase.from('app_users').select('id',{count:'exact',head:true});
       if ((count||0)>0) return json(res,409,{error:'تم إنشاء المستخدمين بالفعل'});
-      const b=await body(req); if(!b.name||!/\d{4,6}/.test(String(b.pin))) return json(res,400,{error:'بيانات غير صحيحة'});
+      const b=await body(req); if(!String(b.name||'').trim()||!/^\d{4,6}$/.test(String(b.pin))) return json(res,400,{error:'بيانات غير صحيحة'});
       const id=crypto.randomUUID(); const hash=await bcrypt.hash(String(b.pin),12);
       const {error}=await supabase.from('app_users').insert({id,name:String(b.name).trim(),pin_hash:hash,role:'owner',branch_id:null,shift_period:null,active:true});
       if(error) return json(res,400,{error:error.message});

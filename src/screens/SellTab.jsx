@@ -4,7 +4,7 @@ import { fmt, TYPE_LABEL } from "../lib";
 import { EmptyState } from "../components/Nav";
 import { ShiftBar } from "../components/ShiftBar";
 
-export function SellTab({ canSell=true, products, branchStock, cart, addToCart, removeFromCart, cartTotal, checkout, lineTotal, activeShift, branchName, onOpenShift, onCloseShift, canOpen=true, canClose=true }) {
+export function SellTab({ canSell=true, products, branchStock, cart, addToCart, removeFromCart, cartTotal, checkout, lineTotal, activeShift, branchName, onOpenShift, onCloseShift, shiftPeriod, canChooseShiftPeriod=false, canOpen=true, canClose=true }) {
   const [picker, setPicker] = useState(null);
   const [query, setQuery] = useState("");
   const [custName, setCustName] = useState("");
@@ -24,11 +24,14 @@ export function SellTab({ canSell=true, products, branchStock, cart, addToCart, 
     return products.filter((p) => p.name.toLowerCase().includes(q));
   }, [products, query]);
 
-  if (!products.length) return <EmptyState text='لسه مفيش منتجات. المدير يقدر يضيفها من الإعدادات.' />;
+  if (!products.length) return <div>
+    <ShiftBar activeShift={activeShift} branchName={branchName} onOpen={onOpenShift} onClose={onCloseShift} shiftPeriod={shiftPeriod} canChooseShiftPeriod={canChooseShiftPeriod} canOpen={canOpen} canClose={canClose} />
+    <EmptyState text='لسه مفيش منتجات. الـ Owner يقدر يضيفها من الإدارة.' />
+  </div>;
 
   return (
     <div>
-      <ShiftBar activeShift={activeShift} branchName={branchName} onOpen={onOpenShift} onClose={onCloseShift} canOpen={canOpen} canClose={canClose} />
+      <ShiftBar activeShift={activeShift} branchName={branchName} onOpen={onOpenShift} onClose={onCloseShift} shiftPeriod={shiftPeriod} canChooseShiftPeriod={canChooseShiftPeriod} canOpen={canOpen} canClose={canClose} />
 
       <div style={{ position: "relative", marginBottom: 12 }}>
         <Search size={16} style={{ position: "absolute", right: 12, top: 12, color: "var(--dim)" }} />
