@@ -20,6 +20,11 @@ export default function App(){
   useEffect(()=>{if(state.user && state.user.role!=='owner' && state.user.branch_id)setBranchId(state.user.branch_id)},[state.user]);
   const showToast=(msg,tone='ok')=>{setToast({msg,tone});setTimeout(()=>setToast(null),2500)};
   const isOwner=state.user?.role==='owner', isManager=state.user?.role==='manager', isCashier=state.user?.role==='cashier';
+  useEffect(()=>{
+    if(state.user?.role==='cashier' && tab==='home'){
+      setTab('sell');
+    }
+  },[state.user,tab]);
   const can=(k)=>{if(!state.user)return false;if(isOwner)return true;if(isManager)return ['sell','inventory','reports'].includes(k);if(isCashier)return k==='sell';return false};
   const stockMap=useMemo(()=>Object.fromEntries(state.stock.map(r=>[`${r.branch_id}:${r.product_id}`,Number(r.qty)])),[state.stock]);
   const branchStock=useMemo(()=>{const m={};state.stock.filter(r=>r.branch_id===branchId).forEach(r=>m[r.product_id]=Number(r.qty));return m},[state.stock,branchId]);
@@ -47,7 +52,7 @@ export default function App(){
   if(state.status==='login')return <LoginScreen onLogin={login}/>;
   if(state.status==='error')return <div className="center-screen"><div className="center-card"><p>{state.error||'حصل خطأ'}</p><button className="btn btn-primary" onClick={()=>location.reload()}>إعادة المحاولة</button></div></div>;
   const navItems=[
-    {id:'home',label:'الرئيسية',icon:Home,visible:true},
+    {id:'home',label:'الرئيسية',icon:Home,visible:!isCashier},
     {id:'sell',label:'الكاشير',icon:ShoppingCart,visible:can('sell')},
     {id:'inventory',label:'المخزون',icon:Package,visible:can('inventory')},
     {id:'reports',label:'التقارير',icon:BarChart3,visible:can('reports')},
