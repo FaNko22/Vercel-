@@ -7,8 +7,8 @@ import { SellTab } from './screens/SellTab';
 import { InventoryTab } from './screens/InventoryTab';
 import { ReportsTab } from './screens/ReportsTab';
 import { SettingsTab } from './screens/SettingsTab';
-import { DashboardTab } from './screens/DashboardTab';
 import { ReceiptModal } from './components/Receipt';
+import { DashboardTab } from './screens/DashboardTab';
 import { ShiftReports } from './components/ShiftReports';
 
 export default function App(){
@@ -28,8 +28,8 @@ export default function App(){
   const can=(k)=>{if(!state.user)return false;if(isOwner)return true;if(isManager)return ['sell','inventory','reports'].includes(k);if(isCashier)return k==='sell';return false};
   const stockMap=useMemo(()=>Object.fromEntries(state.stock.map(r=>[`${r.branch_id}:${r.product_id}`,Number(r.qty)])),[state.stock]);
   const branchStock=useMemo(()=>{const m={};state.stock.filter(r=>r.branch_id===branchId).forEach(r=>m[r.product_id]=Number(r.qty));return m},[state.stock,branchId]);
-  const branchName=state.branches.find(b=>b.id===branchId)?.name||'';
-  const activeShift=state.shifts.find(s=>s.branch_id===branchId&&!s.closed_at)||null;
+  const branchName=branchId==='all'?'كل الفروع':state.branches.find(b=>b.id===branchId)?.name||'';
+  const activeShift=branchId==='all'?null:state.shifts.find(s=>s.branch_id===branchId&&!s.closed_at)||null;
   const refresh=async()=>{try{const b=await api('bootstrap');setState(s=>({...s,...b}));}catch(e){if(e.status===401){setState(s=>({...s,status:'login',user:null}));}}};
   const login=(u)=>{
   setState(s=>({...s,status:'ready',user:u}));
@@ -43,14 +43,14 @@ export default function App(){
   const deleteUser=async id=>{try{await api('delete_user',{method:'POST',body:{id}});await refresh();showToast('تم تعطيل اليوزر')}catch(e){showToast(e.message,'warn')}};
   const setBranches=async list=>{try{await api('rename_branches',{method:'POST',body:{list}});await refresh();showToast('اتحفظت أسماء الفروع')}catch(e){showToast(e.message,'warn')}};
   const restock=async(productId,delta)=>{try{await api('restock',{method:'POST',body:{branch_id:branchId,product_id:productId,delta}});await refresh();showToast('اتحدّث المخزون')}catch(e){showToast(e.message,'warn')}};
-  const addToCart=(product,qty)=>{if(qty<=0)return;setCart(c=>{const i=c.findIndex(x=>x.productId===product.id);if(i>=0){const n=[...c];n[i]={...n[i],qty:n[i].qty+qty};return n}return [...c,{productId:product.id,name:product.name,type:product.type,packageWeight:product.package_weight,sellPrice:Number(product.sell_price),costPrice:Number(product.cost_price),qty}]})};
+  const addToCart=(product,qty)=>{if(!qty)return;setCart(c=>{const i=c.findIndex(x=>x.productId===product.id);if(i>=0){const n=[...c];const nextQty=n[i].qty+qty;if(nextQty<=0)return c.filter(x=>x.productId!==product.id);n[i]={...n[i],qty:nextQty};return n}return qty>0?[...c,{productId:product.id,name:product.name,type:product.type,packageWeight:product.package_weight,sellPrice:Number(product.sell_price),costPrice:Number(product.cost_price),qty}]:c})};
   const removeFromCart=id=>setCart(c=>c.filter(x=>x.productId!==id)); const cartTotal=useMemo(()=>cart.reduce((s,i)=>s+lineTotal(i),0),[cart]);
   const checkout=async info=>{const requestId=crypto.randomUUID();try{const r=await api('create_sale',{method:'POST',body:{branch_id:branchId,request_id:requestId,items:cart.map(i=>({productId:i.productId,qty:i.qty})),customer_name:info?.name||null,customer_phone:info?.phone||null,payment_method:info?.paymentMethod||'cash'}});setCart([]);setLastSale({...r.sale,ts:Date.parse(r.sale.ts)});await refresh();showToast(`تمت عملية البيع — ${fmt(r.sale.total)} ج.م`)}catch(e){showToast(e.message,'warn')}};
   const openShift=async(openingCash,shiftPeriod)=>{try{await api('open_shift',{method:'POST',body:{branch_id:branchId,shift_period:shiftPeriod||state.user.shift_period||'morning',opening_cash:openingCash}});await refresh();showToast('اتفتح الشيفت')}catch(e){showToast(e.message,'warn')}};
   const closeShift=async(actualCash,notes)=>{try{await api('close_shift',{method:'POST',body:{shift_id:activeShift.id,actual_cash:actualCash,notes}});await refresh();showToast('الشيفت اتقفل')}catch(e){showToast(e.message,'warn')}};
   const deleteSale=async sale=>{const reason=window.prompt('اكتب سبب إلغاء الفاتورة (إجباري)');if(!reason?.trim())return;try{await api('void_sale',{method:'POST',body:{sale_id:sale.id,reason}});await refresh();showToast('تم إلغاء الفاتورة وإرجاع المخزون')}catch(e){showToast(e.message,'warn')}};
   const updateSale=async(sale,items)=>{const reason=window.prompt('اكتب سبب تعديل الفاتورة (إجباري)');if(!reason?.trim())return;try{await api('update_sale',{method:'POST',body:{sale_id:sale.id,items:items.map(i=>({productId:i.productId,qty:i.qty})),reason}});await refresh();showToast('اتعدّلت الفاتورة بأمان')}catch(e){showToast(e.message,'warn')}};
-  const reportsData=useMemo(()=>{const today=todayKey(Date.now()),perBranch={},perUser={},productAgg={},all={revenue:0,cost:0,profit:0,count:0,revToday:0,profitToday:0};for(const b of state.branches)perBranch[b.id]={revenue:0,cost:0,profit:0,count:0,revToday:0,profitToday:0};for(const s of state.sales){if(s.status==='voided')continue;const pb=perBranch[s.branch_id]||(perBranch[s.branch_id]={revenue:0,cost:0,profit:0,count:0,revToday:0,profitToday:0});pb.revenue+=Number(s.total);pb.cost+=Number(s.cost);pb.profit+=Number(s.profit);pb.count++;all.revenue+=Number(s.total);all.cost+=Number(s.cost);all.profit+=Number(s.profit);all.count++;const pu=perUser[s.cashier_id]||(perUser[s.cashier_id]={name:s.cashier_name||'—',revenue:0,profit:0,count:0});pu.revenue+=Number(s.total);pu.profit+=Number(s.profit);pu.count++;if(todayKey(s.ts)===today){pb.revToday+=Number(s.total);pb.profitToday+=Number(s.profit);all.revToday+=Number(s.total);all.profitToday+=Number(s.profit)}for(const it of s.items||[]){const k=it.productId||it.name;productAgg[k]=(productAgg[k]||{name:it.name,qty:0});productAgg[k].qty+=it.type==='bulk'?Number(it.qty)/1000:Number(it.qty)}}return {perBranch,perUser,all,topProducts:Object.values(productAgg).sort((a,b)=>b.qty-a.qty).slice(0,5).map(x=>[x.name,x.qty]),bottomProducts:Object.values(productAgg).sort((a,b)=>a.qty-b.qty).slice(0,5).map(x=>[x.name,x.qty])}},[state.sales,state.branches]);
+  const reportsData=useMemo(()=>{const today=todayKey(Date.now()),perBranch={},perUser={},productAgg={},all={revenue:0,cost:0,profit:0,count:0,revToday:0,profitToday:0};for(const b of state.branches)perBranch[b.id]={revenue:0,cost:0,profit:0,count:0,revToday:0,profitToday:0};for(const s of state.sales){if(s.status==='voided')continue;const pb=perBranch[s.branch_id]||(perBranch[s.branch_id]={revenue:0,cost:0,profit:0,count:0,revToday:0,profitToday:0});pb.revenue+=Number(s.total);pb.cost+=Number(s.cost);pb.profit+=Number(s.profit);pb.count++;all.revenue+=Number(s.total);all.cost+=Number(s.cost);all.profit+=Number(s.profit);all.count++;const pu=perUser[s.cashier_id]||(perUser[s.cashier_id]={name:s.cashier_name||'—',revenue:0,profit:0,count:0});pu.revenue+=Number(s.total);pu.profit+=Number(s.profit);pu.count++;if(todayKey(s.ts)===today){pb.revToday+=Number(s.total);pb.profitToday+=Number(s.profit);all.revToday+=Number(s.total);all.profitToday+=Number(s.profit)}for(const it of s.items||[]){const k=it.productId||it.name;productAgg[k]=(productAgg[k]||{name:it.name,qty:0});productAgg[k].qty+=it.type==='bulk'?Number(it.qty)/1000:Number(it.qty)}}return {perBranch,perUser,all,topProducts:Object.values(productAgg).sort((a,b)=>b.qty-a.qty).slice(0,5).map(x=>[x.name,x.qty])}},[state.sales,state.branches]);
   if(state.status==='loading')return <div className="center-screen"><div className="center-card"><Coffee className="spin" size={36}/><p>بتحمّل بيانات بن الشريب...</p></div></div>;
   if(state.status==='setup')return <FirstSetup onCreated={()=>{setState(s=>({...s,status:'login'}));load()}}/>;
   if(state.status==='login')return <LoginScreen onLogin={login}/>;
@@ -62,193 +62,20 @@ export default function App(){
     {id:'reports',label:'التقارير',icon:BarChart3,visible:can('reports')},
     {id:'settings',label:'الإدارة',icon:Settings2,visible:isOwner},
   ].filter(x=>x.visible);
-
   const navigate=(next)=>{setTab(next);setMobileNav(false)};
-
-  const renderTab=()=>{
-    if(tab==='home'){
-      return <DashboardTab
-        user={state.user}
-        branchName={branchName}
-        branchId={branchId}
-        branches={state.branches}
-        sales={state.sales}
-        products={state.products}
-        stock={state.stock}
-        activeShift={activeShift}
-        reportsData={reportsData}
-        onGo={navigate}
-      />;
-    }
-
-    if(tab==='sell'&&can('sell')){
-      return <SellTab
-        canSell={isCashier||isOwner}
-        products={state.products}
-        branchStock={branchStock}
-        cart={cart}
-        addToCart={addToCart}
-        removeFromCart={removeFromCart}
-        cartTotal={cartTotal}
-        checkout={checkout}
-        lineTotal={lineTotal}
-        activeShift={activeShift}
-        branchName={branchName}
-        onOpenShift={openShift}
-        onCloseShift={closeShift}
-        shiftPeriod={state.user.shift_period||'morning'}
-        canChooseShiftPeriod={isOwner}
-        canOpen={isCashier||isOwner}
-        canClose={isManager||isOwner}
-      />;
-    }
-
-    if(tab==='inventory'&&can('inventory')){
-      return <InventoryTab
-        products={state.products}
-        branchStock={branchStock}
-        restock={restock}
-        lowStock={state.products.filter(p=>p.track_stock&&(branchStock[p.id]||0)<=Number(p.reorder_point||0))}
-        canRestock={isOwner}
-      />;
-    }
-
-    if(tab==='reports'&&can('reports')){
-      return <>
-        <ReportsTab
-          reportsData={reportsData}
-          branches={state.branches.filter(b=>isOwner||b.id===state.user.branch_id)}
-          sales={state.sales}
-          shifts={state.shifts}
-          isOwner={isOwner}
-          deleteSale={deleteSale}
-          updateSale={updateSale}
-        />
-        <ShiftReports
-          shifts={state.shifts}
-          sales={state.sales}
-          branches={state.branches}
-          isOwner={isOwner}
-          currentBranchId={branchId}
-        />
-      </>;
-    }
-
-    if(tab==='settings'&&isOwner){
-      return <SettingsTab
-        products={state.products}
-        addOrEditProduct={addOrEditProduct}
-        deleteProduct={deleteProduct}
-        branches={state.branches}
-        setBranches={setBranches}
-        users={state.users}
-        addOrEditUser={addOrEditUser}
-        deleteUser={deleteUser}
-        currentUser={state.user}
-      />;
-    }
-
-    return null;
-  };
-
+  const renderTab=()=>tab==='home'?<DashboardTab isOwner={isOwner} user={state.user} branchName={branchName} branchId={branchId} branches={state.branches} sales={state.sales} products={state.products} stock={state.stock} activeShift={activeShift} reportsData={reportsData} onGo={navigate}/>:tab==='sell'&&can('sell')?<SellTab canSell={(isCashier||isOwner)&&branchId!=='all'} products={state.products} branchStock={branchStock} cart={cart} addToCart={addToCart} removeFromCart={removeFromCart} cartTotal={cartTotal} checkout={checkout} lineTotal={lineTotal} activeShift={activeShift} branchName={branchName} onOpenShift={openShift} onCloseShift={closeShift} shiftPeriod={state.user.shift_period||'morning'} canChooseShiftPeriod={isOwner} canOpen={isCashier||(isOwner&&branchId!=='all')} canClose={isManager||isOwner}/>:tab==='inventory'&&can('inventory')?<InventoryTab products={state.products} branchStock={branchStock} restock={restock} lowStock={state.products.filter(p=>p.track_stock&&(branchStock[p.id]||0)<=Number(p.reorder_point||0))} canRestock={isOwner&&branchId!=='all'}/>:tab==='reports'&&can('reports')?<> <ReportsTab reportsData={reportsData} branches={state.branches.filter(b=>isOwner||b.id===state.user.branch_id)} sales={state.sales} selectedBranchId={branchId} shifts={state.shifts} isOwner={isOwner} deleteSale={deleteSale} updateSale={updateSale}/> <ShiftReports shifts={state.shifts} sales={state.sales} branches={state.branches} isOwner={isOwner} currentBranchId={branchId}/> </>:isOwner?<SettingsTab products={state.products} addOrEditProduct={addOrEditProduct} deleteProduct={deleteProduct} branches={state.branches} setBranches={setBranches} users={state.users} addOrEditUser={addOrEditUser} deleteUser={deleteUser} currentUser={state.user}/>:null;
   return <div className="app-shell">
     <aside className="sidebar">
-      <div className="brand-block">
-        <div className="brand-mark"><Coffee size={20}/></div>
-        <div>
-          <p className="brand-name">بن الشريب</p>
-          <p className="brand-kicker">BIN ALSHREEB OPERATIONS</p>
-        </div>
-      </div>
-
-      <div className="sidebar-rule"/>
-      <p className="nav-label">مساحة التشغيل</p>
-
-      <nav className="nav-list">
-        {navItems.map(({id,label,icon:Icon})=>
-          <button
-            className={`nav-item ${tab===id?'active':''}`}
-            key={id}
-            onClick={()=>navigate(id)}
-          >
-            <Icon size={17}/>
-            <span>{label}</span>
-          </button>
-        )}
-      </nav>
-
-      <div className="sidebar-footer">
-        <div className="user-chip">
-          <div className="avatar">{String(state.user.name||'م').slice(0,1)}</div>
-          <div>
-            <strong>{state.user.name}</strong>
-            <span>{isOwner?'Owner':isManager?'مدير':`كاشير · ${state.user.shift_period==='evening'?'مسائي':'صباحي'}`}</span>
-          </div>
-        </div>
-        <button className="logout-button" onClick={logout}>
-          <LogOut size={15}/> تسجيل الخروج
-        </button>
-      </div>
+      <div className="brand-block"><div className="brand-mark"><Coffee size={20}/></div><div><p className="brand-name">بن الشريب</p><p className="brand-kicker">BIN ALSHREEB OPERATIONS</p></div></div>
+      <div className="sidebar-rule"/><p className="nav-label">مساحة التشغيل</p>
+      <nav className="nav-list">{navItems.map(({id,label,icon:Icon})=><button className={`nav-item ${tab===id?'active':''}`} key={id} onClick={()=>navigate(id)}><Icon size={17}/><span>{label}</span></button>)}</nav>
+      <div className="sidebar-footer"><div className="user-chip"><div className="avatar">{String(state.user.name||'م').slice(0,1)}</div><div><strong>{state.user.name}</strong><span>{isOwner?'Owner':isManager?'مدير':`كاشير · ${state.user.shift_period==='evening'?'مسائي':'صباحي'}`}</span></div></div><button className="logout-button" onClick={logout}><LogOut size={15}/> تسجيل الخروج</button></div>
     </aside>
-
     <div className="main-shell">
-      <header className="topbar">
-        <button
-          className="mobile-menu"
-          onClick={()=>setMobileNav(v=>!v)}
-          aria-label="فتح القائمة"
-        >
-          {mobileNav?<X size={17}/>:<Menu size={17}/>}
-        </button>
-
-        <div className="topbar-brand">
-          <div className="brand-mark"><Coffee size={18}/></div>
-          <div>
-            <p className="brand-name">بن الشريب</p>
-            <p className="brand-kicker">مساحة التشغيل</p>
-          </div>
-        </div>
-
-        <div className="topbar-actions">
-          {isOwner
-            ? <select className="select" value={branchId} onChange={e=>setBranchId(e.target.value)}>
-                {state.branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            : <span className="pill"><User size={12}/>{branchName}</span>
-          }
-          <span className="topbar-user"><User size={14}/>{state.user.name}</span>
-        </div>
-      </header>
-
-      {mobileNav&&
-        <div className="mobile-nav">
-          {navItems.map(({id,label,icon:Icon})=>
-            <button
-              className={`nav-item ${tab===id?'active':''}`}
-              key={id}
-              onClick={()=>navigate(id)}
-            >
-              <Icon size={15}/>{label}
-            </button>
-          )}
-        </div>
-      }
-
+      <header className="topbar"><button className="mobile-menu" onClick={()=>setMobileNav(v=>!v)} aria-label="فتح القائمة">{mobileNav?<X size={17}/>:<Menu size={17}/>}</button><div className="topbar-brand"><div className="brand-mark"><Coffee size={18}/></div><div><p className="brand-name">بن الشريب</p><p className="brand-kicker">مساحة التشغيل</p></div></div><div className="topbar-actions">{isOwner?<select className="select" value={branchId} onChange={e=>setBranchId(e.target.value)}><option value="all">كل الفروع</option>{state.branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select>:<span className="pill"><User size={12}/>{branchName}</span>}<span className="topbar-user"><User size={14}/>{state.user.name}</span></div></header>
+      {mobileNav&&<div className="mobile-nav">{navItems.map(({id,label,icon:Icon})=><button className={`nav-item ${tab===id?'active':''}`} key={id} onClick={()=>navigate(id)}><Icon size={15}/>{label}</button>)}</div>}
       <main className="main-inner">{renderTab()}</main>
     </div>
-
-    {toast&&
-      <div className={`toast ${toast.tone==='warn'?'toast-warn':'toast-ok'}`}>
-        {toast.msg}
-      </div>
-    }
-
-    {lastSale&&
-      <ReceiptModal
-        sale={lastSale}
-        onClose={()=>setLastSale(null)}
-        autoPrint
-      />
-    }
+    {toast&&<div className={`toast ${toast.tone==='warn'?'toast-warn':'toast-ok'}`}>{toast.msg}</div>}{lastSale&&<ReceiptModal sale={lastSale} onClose={()=>setLastSale(null)} autoPrint/>}
   </div>;
 }

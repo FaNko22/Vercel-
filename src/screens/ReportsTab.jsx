@@ -5,12 +5,12 @@ import { fmt, fmtDateTime, lineTotal, downloadCSV } from "../lib";
 import { Stat } from "../components/Nav";
 import { ReceiptModal } from "../components/Receipt";
 
-export function ReportsTab({ reportsData, branches, sales, isOwner, deleteSale, updateSale }) {
+export function ReportsTab({ reportsData, branches, sales, isOwner, deleteSale, updateSale, selectedBranchId='all' }) {
   const [showLog, setShowLog] = useState(false);
   const [finance,setFinance]=useState(null);
   const [summary,setSummary]=useState(null);
-  const fallback = reportsData; const perBranch = summary ? summary.perBranch || {} : fallback.perBranch; const perUser = summary ? summary.perUser || {} : fallback.perUser; const all = summary ? summary.all || fallback.all : fallback.all; const topProducts = summary ? summary.topProducts || fallback.topProducts : fallback.topProducts; const bottomProducts = summary ? summary.bottomProducts || fallback.bottomProducts || [] : fallback.bottomProducts || [];
-  useEffect(()=>{api('report_summary').then(r=>setSummary(r.data)).catch(()=>{}); api('daily_finance',{method:'POST',body:{branch_id:branches.length===1?branches[0].id:null}}).then(r=>setFinance(r.data)).catch(()=>{});},[branches]);
+  const fallback = reportsData; const perBranch = summary ? summary.perBranch || {} : fallback.perBranch; const perUser = summary ? summary.perUser || {} : fallback.perUser; const all = summary ? summary.all || fallback.all : fallback.all; const topProducts = summary ? summary.topProducts || fallback.topProducts : fallback.topProducts;
+  useEffect(()=>{const branch_id=selectedBranchId==='all'?(isOwner?null:(branches[0]?.id||null)):selectedBranchId; api(`report_summary${branch_id?`?branch_id=${encodeURIComponent(branch_id)}`:''}`).then(r=>setSummary(r.data)).catch(()=>{}); api('daily_finance',{method:'POST',body:{branch_id}}).then(r=>setFinance(r.data)).catch(()=>{});},[branches,selectedBranchId,isOwner]);
 
   const now = Date.now();
   const DAY = 86400000;
@@ -44,12 +44,12 @@ export function ReportsTab({ reportsData, branches, sales, isOwner, deleteSale, 
       <p className="tiny" style={{ marginBottom: 8 }}>كل الفروع مجتمعة</p>
       <div className="grid-3">
         <Stat label="مبيعات النهارده" value={fmt(all.revToday)} sub="ج.م" />
-        <Stat label="ربح النهارده" value={fmt(all.profitToday)} sub="ج.م" tone={all.profitToday >= 0 ? "up" : "down"} />
+        {isOwner && <Stat label="ربح النهارده" value={fmt(all.profitToday)} sub="ج.م" tone={all.profitToday >= 0 ? "up" : "down"} />}
         <Stat label="عدد الفواتير" value={all.count} sub="إجمالي" />
       </div>
       <div className="grid-2" style={{ marginTop: 8 }}>
         <Stat label="إجمالي المبيعات (كل الوقت)" value={fmt(all.revenue)} sub="ج.م" />
-        <Stat label="صافي الربح (كل الوقت)" value={fmt(all.profit)} sub="ج.م" tone={all.profit >= 0 ? "up" : "down"} />
+        {isOwner && <Stat label="صافي الربح (كل الوقت)" value={fmt(all.profit)} sub="ج.م" tone={all.profit >= 0 ? "up" : "down"} />}
       </div>
 
       <p className="tiny" style={{ margin: "20px 0 8px" }}>الأسبوع ده مقابل اللي فات</p>
@@ -70,7 +70,7 @@ export function ReportsTab({ reportsData, branches, sales, isOwner, deleteSale, 
       </div>
 
       <p className="tiny" style={{ margin: "20px 0 8px" }}>أداء كل فرع</p>
-      {branches.map((b) => {
+      {(selectedBranchId==='all'?branches:branches.filter(b=>b.id===selectedBranchId)).map((b) => {
         const d = perBranch[b.id] || { revenue: 0, profit: 0, count: 0, revToday: 0 };
         return (
           <div key={b.id} className="branch-row">
@@ -82,7 +82,7 @@ export function ReportsTab({ reportsData, branches, sales, isOwner, deleteSale, 
               <Store size={16} color="var(--muted)" />
               <div>
                 <p style={{ fontWeight: 700 }}>{b.name}</p>
-                <p className="tiny">{d.count} فاتورة · ربح {fmt(d.profit)} ج.م</p>
+                <p className="tiny">{d.count} فاتورة{isOwner ? ` · ربح ${fmt(d.profit)} ج.م` : ""}</p>
               </div>
             </div>
           </div>
@@ -100,7 +100,7 @@ export function ReportsTab({ reportsData, branches, sales, isOwner, deleteSale, 
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <User size={16} color="var(--muted)" />
-                <p style={{ fontWeight: 700 }}>{d.name || name}</p>
+                <p style={{ fontWeight: 700 }}>{name}</p>
               </div>
             </div>
           ))}
@@ -111,18 +111,6 @@ export function ReportsTab({ reportsData, branches, sales, isOwner, deleteSale, 
         <>
           <p className="tiny" style={{ margin: "20px 0 8px" }}>الأكتر مبيعًا</p>
           {topProducts.map(([name, qty], i) => (
-            <div key={name} style={{ display: "flex", justifyContent: "space-between", background: "var(--surface)", borderRadius: 10, padding: "8px 12px", fontSize: 14, marginBottom: 6 }}>
-              <span className="tiny">{fmt(qty)}</span>
-              <span style={{ display: "flex", gap: 8 }}><span className="tiny">{i + 1}.</span>{name}</span>
-            </div>
-          ))}
-        </>
-      )}
-
-      {bottomProducts.length > 0 && (
-        <>
-          <p className="tiny" style={{ margin: "20px 0 8px" }}>الأقل مبيعًا</p>
-          {bottomProducts.map(([name, qty], i) => (
             <div key={name} style={{ display: "flex", justifyContent: "space-between", background: "var(--surface)", borderRadius: 10, padding: "8px 12px", fontSize: 14, marginBottom: 6 }}>
               <span className="tiny">{fmt(qty)}</span>
               <span style={{ display: "flex", gap: 8 }}><span className="tiny">{i + 1}.</span>{name}</span>

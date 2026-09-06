@@ -1,6 +1,8 @@
 export async function api(action, options={}) {
   const method = options.method || (options.body === undefined ? 'GET' : 'POST');
-  const res = await fetch(`/api/pos?action=${encodeURIComponent(action)}`, {
+  const [actionName, query] = String(action).split('?', 2);
+  const url = `/api/pos?action=${encodeURIComponent(actionName)}${query ? `&${query}` : ''}`;
+  const res = await fetch(url, {
     method,
     headers: options.body === undefined ? {} : {'Content-Type':'application/json'},
     credentials:'include',
