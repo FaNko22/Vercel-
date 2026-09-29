@@ -40,7 +40,7 @@ export function ReportsTab({ reportsData, branches, sales, isOwner, deleteSale, 
 
   return (
     <div>
-      {finance && <><p className="tiny" style={{ marginBottom: 8 }}>المالية اليومية من قاعدة البيانات</p><div className="grid-3"><Stat label="مبيعات اليوم" value={fmt(finance.revenue)} sub="ج.م"/><Stat label="نقدي" value={fmt(finance.cash)} sub="ج.م"/><Stat label="فودافون كاش" value={fmt(finance.vodafone_cash)} sub="ج.م"/></div></>}
+      {finance && <><p className="tiny" style={{ marginBottom: 8 }}>المالية اليومية من قاعدة البيانات</p><div className="grid-3"><Stat label="مبيعات اليوم" value={fmt(finance.revenue)} sub="ج.م"/><Stat label="المصروفات" value={fmt(finance.expenses_total||0)} sub="ج.م"/><Stat label="صافي النقدي" value={fmt(finance.net_cash||0)} sub="ج.م"/></div><div className="grid-3" style={{marginTop:8}}><Stat label="نقدي" value={fmt(finance.cash)} sub="ج.م"/><Stat label="فودافون كاش" value={fmt(finance.vodafone_cash)} sub="ج.م"/><Stat label="الفواتير الملغاة" value={fmt(finance.void_total||0)} sub="ج.م"/></div></>}
       <p className="tiny" style={{ marginBottom: 8 }}>كل الفروع مجتمعة</p>
       <div className="grid-3">
         <Stat label="مبيعات النهارده" value={fmt(all.revToday)} sub="ج.م" />
