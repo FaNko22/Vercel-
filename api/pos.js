@@ -55,15 +55,15 @@ async function bootstrap(user) {
 async function login(req,res, pin) {
   if (!/^\d{4,6}$/.test(String(pin||''))) return json(res,400,{error:'PIN غير صالح'});
   const key=clientKey(req);
-  const guard=await supabase.rpc('pos_login_guard',{p_key:key,p_success:false});
+  const guard=await supabase.rpc('pos_login_check',{p_key:key});
   if (guard.error) return json(res,500,{error:'تعذر التحقق من تسجيل الدخول'});
   if (guard.data?.allowed===false) return json(res,429,{error:'محاولات دخول كثيرة. جرّب بعد قليل.'});
   const { data: users, error } = await supabase.from('app_users').select('id,name,role,branch_id,shift_period,active,pin_hash').eq('active',true);
   if (error) return json(res,500,{error:'تعذر تسجيل الدخول'});
   let found = null;
   for (const u of users||[]) if (u.pin_hash && await bcrypt.compare(String(pin),u.pin_hash)) { found=u; break; }
-  if (!found) { await supabase.rpc('pos_login_guard',{p_key:key,p_success:false}); return json(res,401,{error:'الرقم السري غلط'}); }
-  await supabase.rpc('pos_login_guard',{p_key:key,p_success:true});
+  if (!found) { await supabase.rpc('pos_login_record',{p_key:key,p_success:false}); return json(res,401,{error:'الرقم السري غلط'}); }
+  await supabase.rpc('pos_login_record',{p_key:key,p_success:true});
   setCookie(res, sign({uid:found.id,exp:Date.now()+8*60*60*1000,iat:Date.now()}));
   return json(res,200,{user:{id:found.id,name:found.name,role:found.role,branch_id:found.branch_id,shift_period:found.shift_period,active:found.active}});
 }
