@@ -43,15 +43,39 @@ function OpenShiftModal({ onClose, onOpen, shiftPeriod, canChooseShiftPeriod }) 
 
 function CloseShiftModal({ shift, onClose, onConfirm }) {
   const [cash, setCash] = useState("");
-  const [notes, setNotes] = useState("");
+  const [expenses, setExpenses] = useState([]);
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+
+  const addExpense = () => {
+    const value = Number(amount);
+    const label = description.trim();
+    if (!(value > 0) || !label) return;
+    setExpenses(list => [...list, { description: label, amount: value }]);
+    setDescription(""); setAmount("");
+  };
+  const removeExpense = (idx) => setExpenses(list => list.filter((_,i)=>i!==idx));
+  const expenseTotal = expenses.reduce((n,e)=>n+Number(e.amount||0),0);
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head"><button className="icon-btn" onClick={onClose}><X size={20} /></button><h3>إنهاء الشيفت</h3></div>
         <p className="tiny" style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 4 }}><Wallet size={14} /> عد الكاش الموجود فعليًا في الدرج واكتبه هنا</p>
         <input className="text-input" type="number" placeholder="النقدية الفعلية في الدرج" value={cash} onChange={(e) => setCash(e.target.value)} />
-        <input className="text-input" placeholder="ملاحظات (اختياري)" value={notes} onChange={(e) => setNotes(e.target.value)} />
-        <button className="btn btn-primary" disabled={cash === ""} onClick={() => onConfirm(Number(cash) || 0, notes)}>تأكيد الإقفال</button>
+
+        <div style={{marginTop:12,paddingTop:10,borderTop:'1px solid var(--border)'}}>
+          <p style={{fontWeight:700,marginBottom:7}}>مصروفات الشيفت</p>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 120px auto',gap:6}}>
+            <input className="text-input" placeholder="البيان — مثال: كهرباء" value={description} onChange={e=>setDescription(e.target.value)} />
+            <input className="text-input" type="number" min="0" placeholder="المبلغ" value={amount} onChange={e=>setAmount(e.target.value)} />
+            <button className="btn-secondary" type="button" onClick={addExpense}>إضافة</button>
+          </div>
+          {expenses.map((e,i)=><div key={i} className="branch-row" style={{marginTop:6,padding:'7px 9px'}}><button style={{color:'var(--bad)'}} onClick={()=>removeExpense(i)}><X size={14}/></button><span>{fmt(e.amount)} ج.م</span><strong>{e.description}</strong></div>)}
+          <p className="tiny" style={{marginTop:7}}>إجمالي المصروفات: <b>{fmt(expenseTotal)} ج.م</b></p>
+        </div>
+
+        <button className="btn btn-primary" disabled={cash === ""} onClick={() => onConfirm(Number(cash) || 0, expenses)}>تأكيد الإقفال</button>
       </div>
     </div>
   );

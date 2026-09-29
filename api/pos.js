@@ -49,7 +49,10 @@ async function bootstrap(user) {
     branchesQ, supabase.from('products').select('*').eq('active',true).order('name'), stockQ,
     user.role==='owner' ? supabase.from('app_users').select('id,name,role,branch_id,shift_period,active').order('name') : Promise.resolve({data:[]}), salesQ, shiftsQ
   ]);
-  return { user, branches:b.data||[], products:p.data||[], stock:s.data||[], users:users.data||[], sales:sales.data||[], shifts:shifts.data||[] };
+  const rawSales=sales.data||[];
+  const safeSales=user.role==='manager' ? rawSales.map(({cost,profit,...sale})=>sale) : rawSales;
+  const safeProducts=user.role==='manager' ? (p.data||[]).map(({cost_price,...product})=>product) : (p.data||[]);
+  return { user, branches:b.data||[], products:safeProducts, stock:s.data||[], users:users.data||[], sales:safeSales, shifts:shifts.data||[] };
 }
 
 async function login(req,res, pin) {
@@ -67,6 +70,8 @@ async function login(req,res, pin) {
   setCookie(res, sign({uid:found.id,exp:Date.now()+8*60*60*1000,iat:Date.now()}));
   return json(res,200,{user:{id:found.id,name:found.name,role:found.role,branch_id:found.branch_id,shift_period:found.shift_period,active:found.active}});
 }
+
+function fmtQty(v){ const n=Number(v||0); return Number.isInteger(n)?String(n):n.toFixed(3).replace(/0+$/,'').replace(/\.$/,''); }
 
 export default async function handler(req,res){
   try {
@@ -94,12 +99,72 @@ export default async function handler(req,res){
     if(action==='rename_branches'){ assertRole(user,['owner']); const list=Array.isArray(b.list)?b.list:[]; for(const x of list){ if(!x.id||!String(x.name).trim()) continue; const {error}=await supabase.from('branches').update({name:String(x.name).trim()}).eq('id',x.id); if(error) throw Object.assign(new Error(error.message),{status:400}); } return json(res,200,{ok:true}); }
     if(action==='restock'){ assertRole(user,['owner']); if(!allowedBranch(user,b.branch_id)) return json(res,403,{error:'غير مسموح'}); const delta=Number(b.delta); if(!(delta>0)) return json(res,400,{error:'الكمية يجب أن تكون أكبر من صفر'}); const {data,error}=await supabase.rpc('pos_restock',{p_branch_id:b.branch_id,p_product_id:b.product_id,p_delta:delta,p_user_id:user.id}); if(error) throw Object.assign(new Error(error.message),{status:400}); return json(res,200,{ok:true,data}); }
     if(action==='open_shift'){ assertRole(user,['cashier','owner']); const branchId=user.role==='owner'?b.branch_id:user.branch_id; if(!branchId) return json(res,400,{error:'الحساب غير مربوط بفرع'}); if(user.role==='cashier' && user.shift_period!==b.shift_period) return json(res,403,{error:'ده مش الشيفت المخصص ليك'}); const {data,error}=await supabase.rpc('pos_open_shift_v2',{p_branch_id:branchId,p_user_id:user.id,p_shift_period:b.shift_period||(user.role==='cashier'?user.shift_period:'morning'),p_opening_cash:Number(b.opening_cash||0)}); if(error) throw Object.assign(new Error(error.message),{status:400}); return json(res,200,{ok:true,shift:data}); }
-    if(action==='close_shift'){ assertRole(user,['manager','owner']); const {data,error}=await supabase.rpc('pos_close_shift',{p_shift_id:b.shift_id,p_actual_cash:Number(b.actual_cash||0),p_notes:b.notes||null,p_closed_by:user.id}); if(error) throw Object.assign(new Error(error.message),{status:400}); return json(res,200,{ok:true,shift:data}); }
+    if(action==='close_shift'){
+      assertRole(user,['manager','owner']);
+      let data,error;
+      if(Array.isArray(b.notes)){
+        ({data,error}=await supabase.rpc('pos_close_shift_v3',{p_shift_id:b.shift_id,p_actual_cash:Number(b.actual_cash||0),p_expenses:b.notes,p_closed_by:user.id}));
+        if(error) throw Object.assign(new Error(error.message),{status:400});
+        return json(res,200,{ok:true,shift:data.shift,expense_total:data.expense_total});
+      }
+      ({data,error}=await supabase.rpc('pos_close_shift',{p_shift_id:b.shift_id,p_actual_cash:Number(b.actual_cash||0),p_notes:b.notes||null,p_closed_by:user.id}));
+      if(error) throw Object.assign(new Error(error.message),{status:400});
+      return json(res,200,{ok:true,shift:data});
+    }
     if(action==='create_sale'){ assertRole(user,['cashier','owner']); const branchId=user.role==='owner'?b.branch_id:user.branch_id; if(!branchId) return json(res,403,{error:'الحساب غير مربوط بفرع'}); const requestId=String(b.request_id||'').trim(); if(!requestId) return json(res,400,{error:'رقم العملية مفقود، حاول مرة أخرى'}); const {data,error}=await supabase.rpc('pos_create_sale_v2',{p_branch_id:branchId,p_cashier_id:user.id,p_items:b.items,p_customer_name:b.customer_name||null,p_customer_phone:b.customer_phone||null,p_payment_method:b.payment_method||'cash',p_request_id:requestId}); if(error) throw Object.assign(new Error(error.message),{status:400}); return json(res,200,{ok:true,sale:data}); }
     if(action==='void_sale'){ assertRole(user,['owner']); const {data,error}=await supabase.rpc('pos_void_sale',{p_sale_id:b.sale_id,p_reason:String(b.reason||'').trim(),p_actor_id:user.id}); if(error) throw Object.assign(new Error(error.message),{status:400}); return json(res,200,{ok:true,sale:data}); }
     if(action==='update_sale'){ assertRole(user,['owner']); const {data,error}=await supabase.rpc('pos_update_sale_v2',{p_sale_id:b.sale_id,p_items:b.items,p_reason:String(b.reason||'').trim(),p_actor_id:user.id}); if(error) throw Object.assign(new Error(error.message),{status:400}); return json(res,200,{ok:true,sale:data}); }
-    if(action==='report_summary' && req.method==='GET'){ assertRole(user,['manager','owner']); const branchId=user.role==='owner'?(new URL(req.url,'https://vercel.local').searchParams.get('branch_id')||null):user.branch_id; const {data,error}=await supabase.rpc('pos_report_summary',{p_branch_id:branchId}); if(error) throw Object.assign(new Error(error.message),{status:400}); return json(res,200,{data}); }
-    if(action==='daily_finance'){ assertRole(user,['manager','owner']); const {data,error}=await supabase.rpc('pos_daily_finance_v2',{p_branch_id:user.role==='owner'?(b.branch_id||null):user.branch_id,p_date:b.date||nowCairoDate()}); if(error) throw Object.assign(new Error(error.message),{status:400}); return json(res,200,{ok:true,data}); }
+    if(action==='report_summary' && req.method==='GET'){ assertRole(user,['manager','owner']); const branchId=user.role==='owner'?(new URL(req.url,'https://vercel.local').searchParams.get('branch_id')||null):user.branch_id; const {data,error}=await supabase.rpc('pos_report_summary',{p_branch_id:branchId}); if(error) throw Object.assign(new Error(error.message),{status:400}); if(user.role==='manager' && data){ const clean={...data,all:{...(data.all||{})},perBranch:{...(data.perBranch||{})},perUser:{...(data.perUser||{})}}; delete clean.all.cost; delete clean.all.profit; delete clean.all.profitToday; for(const k of Object.keys(clean.perBranch)){ delete clean.perBranch[k].cost; delete clean.perBranch[k].profit; delete clean.perBranch[k].profitToday; } for(const k of Object.keys(clean.perUser)){ delete clean.perUser[k].cost; delete clean.perUser[k].profit; } return json(res,200,{data:clean}); } return json(res,200,{data}); }
+    if(action==='daily_finance'){ assertRole(user,['manager','owner']); const {data,error}=await supabase.rpc('pos_daily_finance_v2',{p_branch_id:user.role==='owner'?(b.branch_id||null):user.branch_id,p_date:b.date||nowCairoDate()}); if(error) throw Object.assign(new Error(error.message),{status:400}); if(user.role==='manager' && data){ const clean={...data}; delete clean.cost; delete clean.profit; return json(res,200,{ok:true,data:clean}); } return json(res,200,{ok:true,data}); }
+    if(action==='closing_report' && req.method==='GET'){
+      assertRole(user,['manager','owner']);
+      const url=new URL(req.url,'https://vercel.local');
+      const kind=url.searchParams.get('kind')==='shift'?'shift':'day';
+      const requestedShift=url.searchParams.get('shift_id');
+      const requestedBranch=user.role==='owner'?(url.searchParams.get('branch_id')||null):user.branch_id;
+      let shifts=[];
+      if(kind==='shift' && requestedShift){
+        const q=await supabase.from('shifts').select('*').eq('id',requestedShift).maybeSingle();
+        if(q.error) throw Object.assign(new Error(q.error.message),{status:400});
+        if(q.data && (!requestedBranch || q.data.branch_id===requestedBranch)) shifts=[q.data];
+      }else{
+        const q=await supabase.from('shifts').select('*').order('opened_at',{ascending:false}).limit(500);
+        if(q.error) throw Object.assign(new Error(q.error.message),{status:400});
+        const date=url.searchParams.get('date')||nowCairoDate();
+        shifts=(q.data||[]).filter(s=>(!requestedBranch||s.branch_id===requestedBranch) && new Date(s.closed_at||s.opened_at).toLocaleDateString('en-CA',{timeZone:'Africa/Cairo'})===date);
+      }
+      if(!shifts.length) return json(res,200,{data:{kind,date_label:kind==='day'?(url.searchParams.get('date')||nowCairoDate()):'—',branch_name:requestedBranch?'':null,summary:{sales_total:0,expenses_total:0,expected_cash:0,actual_cash:0,difference:0,invoice_count:0,void_total:0},products:[],expenses:[],voids:[],shifts:[]}});
+      const ids=shifts.map(s=>s.id);
+      const [salesQ,expQ]=await Promise.all([
+        supabase.from('sales').select('*').in('shift_id',ids).order('ts',{ascending:true}),
+        supabase.from('shift_expenses').select('*').in('shift_id',ids).order('created_at',{ascending:true})
+      ]);
+      if(salesQ.error) throw Object.assign(new Error(salesQ.error.message),{status:400});
+      if(expQ.error) throw Object.assign(new Error(expQ.error.message),{status:400});
+      const allSales=salesQ.data||[], expenses=expQ.data||[];
+      const completed=allSales.filter(s=>s.status==='completed');
+      const voids=allSales.filter(s=>s.status==='voided');
+      const productMap=new Map();
+      for(const sale of completed){
+        for(const it of sale.items||[]){
+          const key=it.productId||it.name;
+          const qty=Number(it.qty||0);
+          const prev=productMap.get(key)||{name:it.name||'—',qty:0,total:0,sell_price:Number(it.sellPrice||0),type:it.type};
+          prev.qty+=qty;
+          prev.total+=Number(it.lineRevenue ?? (it.type==='bulk' ? (qty/1000)*Number(it.sellPrice||0) : qty*Number(it.sellPrice||0)));
+          productMap.set(key,prev);
+        }
+      }
+      const salesTotal=completed.reduce((n,s)=>n+Number(s.total||0),0);
+      const expenseTotal=expenses.reduce((n,e)=>n+Number(e.amount||0),0);
+      const expected=shifts.reduce((n,s)=>n+Number(s.expected_cash||0),0);
+      const actual=shifts.filter(s=>s.closed_at).reduce((n,s)=>n+Number(s.actual_cash||0),0);
+      const difference=shifts.filter(s=>s.closed_at).reduce((n,s)=>n+Number(s.difference||0),0);
+      const branchNames=[...new Set(shifts.map(s=>s.branch_name).filter(Boolean))];
+      const dayLabel=kind==='day' ? (url.searchParams.get('date')||nowCairoDate()) : new Date(shifts[0].closed_at||shifts[0].opened_at).toLocaleDateString('en-CA',{timeZone:'Africa/Cairo'});
+      const shiftRows=shifts.map(s=>{const ss=completed.filter(x=>x.shift_id===s.id);const ee=expenses.filter(x=>x.shift_id===s.id);return {id:s.id,branch_name:s.branch_name||'—',shift_period:s.shift_period,sales_total:ss.reduce((n,x)=>n+Number(x.total||0),0),expenses_total:ee.reduce((n,x)=>n+Number(x.amount||0),0),difference:Number(s.difference||0)};});
+      return json(res,200,{data:{kind,date_label:dayLabel,branch_name:branchNames.length===1?branchNames[0]:(requestedBranch?'—':'كل الفروع'),shift:kind==='shift'?shifts[0]:null,summary:{sales_total:salesTotal,expenses_total:expenseTotal,expected_cash:expected,actual_cash:actual,difference,invoice_count:completed.length,void_total:voids.reduce((n,s)=>n+Number(s.total||0),0)},products:[...productMap.values()].map(p=>({...p,qty_label:p.type==='bulk'?`${fmtQty(p.qty)} جم`:fmtQty(p.qty)})).sort((a,b)=>b.total-a.total),expenses:expenses.map(e=>({description:e.description,amount:Number(e.amount||0)})),voids:voids.map(v=>({invoice_label:v.id?.slice(0,8)||'—',total:Number(v.total||0),reason:v.void_reason||'—'})),shifts:shiftRows}});
+    }
     if(action==='audit_log'){ assertRole(user,['owner']); const {data,error}=await supabase.from('audit_log').select('*').order('created_at',{ascending:false}).limit(500); if(error) throw Object.assign(new Error(error.message),{status:400}); return json(res,200,{data:data||[]}); }
     return json(res,404,{error:'Action not found'});
   } catch(e){ console.error(e); return json(res,e.status||500,{error:e.message||'Server error'}); }

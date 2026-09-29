@@ -2,11 +2,11 @@ import { useMemo } from 'react';
 import { Activity, AlertTriangle, BarChart3, Clock3, Package, ReceiptText, TrendingUp, WalletCards } from 'lucide-react';
 import { fmt, fmtDateTime, todayKey } from '../lib';
 
-export function DashboardTab({ user, branchName, branchId, branches, sales, products, stock, activeShift, reportsData, onGo }) {
+export function DashboardTab({ isOwner=false, user, branchName, branchId, branches, sales, products, stock, activeShift, reportsData, onGo }) {
   const today = todayKey(Date.now());
-  const branchSales = useMemo(() => sales.filter((sale) => sale.branch_id === branchId && sale.status !== 'voided'), [sales, branchId]);
+  const branchSales = useMemo(() => branchId === 'all' ? sales.filter((sale) => sale.status !== 'voided') : sales.filter((sale) => sale.branch_id === branchId && sale.status !== 'voided'), [sales, branchId]);
   const todaySales = useMemo(() => branchSales.filter((sale) => todayKey(sale.ts || sale.created_at) === today), [branchSales, today]);
-  const branchStock = useMemo(() => Object.fromEntries(stock.filter((row) => row.branch_id === branchId).map((row) => [row.product_id, Number(row.qty)])), [stock, branchId]);
+  const branchStock = useMemo(() => { const rows = branchId === 'all' ? stock : stock.filter((row) => row.branch_id === branchId); const m = {}; for (const row of rows) m[row.product_id] = (m[row.product_id] || 0) + Number(row.qty); return m; }, [stock, branchId]);
   const lowStock = useMemo(() => products.filter((p) => p.active !== false && p.track_stock && (branchStock[p.id] || 0) <= Number(p.reorder_point || 0)), [products, branchStock]);
   const topProducts = useMemo(() => {
     const agg = {};
@@ -22,7 +22,7 @@ export function DashboardTab({ user, branchName, branchId, branches, sales, prod
   const todayCount = todaySales.length;
   const roleLabel = user.role === 'owner' ? 'Owner' : user.role === 'manager' ? 'مدير' : `كاشير · ${user.shift_period === 'evening' ? 'مسائي' : 'صباحي'}`;
   const greeting = user.role === 'owner' ? 'لوحة تحكم المالك' : user.role === 'manager' ? 'متابعة الفرع اليوم' : 'جاهز للشيفت؟';
-  const selectedSummary = reportsData.perBranch[branchId] || { revenue: 0, profit: 0, count: 0 };
+  const selectedSummary = branchId === 'all' ? reportsData.all : (reportsData.perBranch[branchId] || { revenue: 0, profit: 0, count: 0 });
   const recent = [...branchSales].sort((a, b) => Date.parse(b.ts || b.created_at) - Date.parse(a.ts || a.created_at)).slice(0, 5);
 
   return <div className="dashboard">
@@ -40,7 +40,7 @@ export function DashboardTab({ user, branchName, branchId, branches, sales, prod
 
     <div className="grid-stats dashboard-stats">
       <Metric icon={WalletCards} label="مبيعات اليوم" value={`${fmt(todayRevenue)} ج.م`} hint={`${todayCount} فاتورة`} />
-      <Metric icon={TrendingUp} label="ربح اليوم" value={`${fmt(todayProfit)} ج.م`} hint="بعد التكلفة" />
+      {isOwner && <Metric icon={TrendingUp} label="ربح اليوم" value={`${fmt(todayProfit)} ج.م`} hint="بعد التكلفة" />}
       <Metric icon={ReceiptText} label="فواتير اليوم" value={fmt(todayCount)} hint="غير الملغاة" />
       <Metric icon={Package} label="مخزون يحتاج متابعة" value={fmt(lowStock.length)} hint="حسب حد إعادة الطلب" tone={lowStock.length ? 'warn' : 'good'} />
     </div>
@@ -48,13 +48,13 @@ export function DashboardTab({ user, branchName, branchId, branches, sales, prod
     <div className="dashboard-grid">
       <section className="card dashboard-card">
         <div className="card-title"><div><h2>ملخص الفرع</h2><p>{branchName || 'الفرع الحالي'} · إجمالي السجلات المتاحة</p></div><BarChart3 size={18} /></div>
-        <div className="mini-metrics"><MiniMetric label="الإيراد" value={`${fmt(selectedSummary.revenue)} ج.م`} /><MiniMetric label="الربح" value={`${fmt(selectedSummary.profit)} ج.م`} /><MiniMetric label="الفواتير" value={fmt(selectedSummary.count)} /></div>
+        <div className="mini-metrics"><MiniMetric label="الإيراد" value={`${fmt(selectedSummary.revenue)} ج.م`} />{isOwner && <MiniMetric label="الربح" value={`${fmt(selectedSummary.profit)} ج.م`} />}<MiniMetric label="الفواتير" value={fmt(selectedSummary.count)} /></div>
         <button className="button button-secondary button-wide" onClick={() => onGo('reports')}>فتح التقارير</button>
       </section>
 
       <section className="card dashboard-card">
         <div className="card-title"><div><h2>حالة الشيفت</h2><p>المتابعة السريعة</p></div><Clock3 size={18} /></div>
-        {activeShift ? <div className="dashboard-list"><Row label="الحالة" value="مفتوح" good /><Row label="البداية" value={fmtDateTime(Date.parse(activeShift.opened_at))} /><Row label="النقدية الافتتاحية" value={`${fmt(activeShift.opening_cash)} ج.م`} /></div> : <div className="dashboard-empty"><Activity size={18} /><span>مفيش شيفت مفتوح حاليًا.</span></div>}
+        {branchId === 'all' ? <div className="dashboard-empty"><BarChart3 size={18} /><span>أنت بتراجع كل الفروع. اختار فرع من الأعلى لفتح الشيفت أو البيع.</span></div> : activeShift ? <div className="dashboard-list"><Row label="الحالة" value="مفتوح" good /><Row label="البداية" value={fmtDateTime(Date.parse(activeShift.opened_at))} /><Row label="النقدية الافتتاحية" value={`${fmt(activeShift.opening_cash)} ج.م`} /></div> : <div className="dashboard-empty"><Activity size={18} /><span>مفيش شيفت مفتوح حاليًا.</span></div>}
         <button className="button button-primary button-wide" onClick={() => onGo('sell')}>{activeShift ? 'الذهاب للكاشير' : 'فتح شاشة الشيفت'}</button>
       </section>
 
