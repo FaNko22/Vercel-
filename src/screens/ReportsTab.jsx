@@ -7,6 +7,7 @@ import { ReceiptModal } from "../components/Receipt";
 
 export function ReportsTab({ reportsData, branches, sales, isOwner, deleteSale, updateSale, selectedBranchId='all' }) {
   const [showLog, setShowLog] = useState(false);
+  const [showVoids, setShowVoids] = useState(false);
   const [finance,setFinance]=useState(null);
   const [summary,setSummary]=useState(null);
   const fallback = reportsData; const perBranch = summary ? summary.perBranch || {} : fallback.perBranch; const perUser = summary ? summary.perUser || {} : fallback.perUser; const all = summary ? summary.all || fallback.all : fallback.all; const topProducts = summary ? summary.topProducts || fallback.topProducts : fallback.topProducts;
@@ -125,11 +126,15 @@ export function ReportsTab({ reportsData, branches, sales, isOwner, deleteSale, 
             <button className="btn-secondary" style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={() => setShowLog(true)}>
               <Receipt size={14} /> سجل الفواتير (تعديل / إلغاء)
             </button>
+            <button className="btn-secondary" style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={() => setShowVoids(true)}>
+              <Trash2 size={14} /> سجل الفواتير الملغاة
+            </button>
             <button className="btn-secondary" style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={exportCSV}>
               <Download size={14} /> تصدير كل المبيعات CSV
             </button>
           </div>
           {showLog && <SalesLog sales={sales} onClose={() => setShowLog(false)} deleteSale={deleteSale} updateSale={updateSale} />}
+          {showVoids && <VoidedSalesLog sales={sales} onClose={() => setShowVoids(false)} />}
         </>
       )}
     </div>
@@ -191,6 +196,48 @@ function SalesLog({ sales, onClose, deleteSale, updateSale }) {
           />
         )}
         {printingSale && <ReceiptModal sale={printingSale} onClose={() => setPrintingSale(null)} />}
+      </div>
+    </div>
+  );
+}
+
+function VoidedSalesLog({ sales, onClose }) {
+  const [query, setQuery] = useState("");
+  const sorted = sales.filter(s => s.status === "voided").sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts));
+  const q = query.trim().toLowerCase();
+  const list = q ? sorted.filter(s =>
+    (s.customer_phone || "").includes(q) ||
+    (s.customer_name || "").toLowerCase().includes(q) ||
+    (s.void_reason || "").toLowerCase().includes(q)
+  ) : sorted;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head"><button className="icon-btn" onClick={onClose}><X size={20} /></button><h3>سجل الفواتير الملغاة</h3></div>
+        <div style={{ position: "relative", marginBottom: 12 }}>
+          <Search size={16} style={{ position: "absolute", right: 12, top: 12, color: "var(--dim)" }} />
+          <input className="text-input" style={{ width: "100%", paddingRight: 36 }}
+            placeholder="دور برقم الموبايل أو اسم العميل أو سبب الإلغاء..."
+            value={query} onChange={(e) => setQuery(e.target.value)} />
+        </div>
+        <div style={{ maxHeight: "60vh", overflowY: "auto" }}>
+          {list.map((s) => (
+            <div key={s.id} className="branch-row" style={{ alignItems: "flex-start" }}>
+              <div style={{ textAlign: "left", minWidth: 82 }}>
+                <p style={{ fontWeight: 800, color: "var(--bad)" }}>{fmt(s.total)} ج.م</p>
+                <p className="tiny">{fmtDateTime(Date.parse(s.ts))}</p>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <p style={{ fontWeight: 700 }}>{s.branch_name || "—"}</p>
+                <p className="tiny">{s.cashier_name || "—"}{s.customer_name ? ` · ${s.customer_name}` : ""}</p>
+                <p className="tiny" style={{ marginTop: 4 }}>السبب: {s.void_reason || "—"}</p>
+                <p className="tiny">رقم: {s.id?.slice(0, 8) || "—"}</p>
+              </div>
+            </div>
+          ))}
+          {!list.length && <p className="tiny">مفيش فواتير ملغاة{q ? " مطابقة للبحث" : ""}.</p>}
+        </div>
       </div>
     </div>
   );
